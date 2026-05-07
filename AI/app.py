@@ -154,6 +154,8 @@ def auto_connect():
         return  # Already connected
 
     api_key = os.getenv("OPENAI_API_KEY", "")
+    model = os.getenv("OPENAI_MODEL", "gpt-4o")
+    base_url = os.getenv("OPENAI_BASE_URL", None)
 
     if not api_key:
         st.session_state.connection_error = (
@@ -162,7 +164,7 @@ def auto_connect():
         return
 
     try:
-        agent = AIAgent(api_key=api_key)
+        agent = AIAgent(api_key=api_key, model=model, base_url=base_url)
         st.session_state.agent = agent
         st.session_state.is_connected = True
         st.session_state.connection_error = None
@@ -186,6 +188,9 @@ def render_sidebar():
         # ---- Connection status ----
         if st.session_state.is_connected:
             st.success("✅ Đã kết nối OpenAI (Responses API)")
+            agent = st.session_state.agent
+            if agent:
+                st.markdown(f"**Model:** `{agent.model}`")
         elif st.session_state.connection_error:
             st.error(f"❌ {st.session_state.connection_error}")
             if st.button("🔄 Thử kết nối lại", use_container_width=True, type="primary"):

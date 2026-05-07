@@ -40,15 +40,16 @@ pandas (pd), numpy (np), matplotlib (plt), seaborn (sns), plotly.express (px), p
 class AIAgent:
     """Wrapper around OpenAI Responses API for code generation."""
 
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
+    def __init__(self, api_key: str, model: str = "gpt-4o", base_url: str | None = None):
         """
         Initialize the AI agent.
 
         Args:
             api_key: OpenAI API key
-            model: Model to use for responses (default: gpt-4o-mini)
+            model: Model to use for responses (default: gpt-4o)
+            base_url: Optional custom API base URL
         """
-        self.client = OpenAI(api_key=api_key)
+        self.client = OpenAI(api_key=api_key, base_url=base_url)
         self.model = model
 
     def create_conversation(self) -> str:
