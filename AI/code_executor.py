@@ -28,18 +28,24 @@ import json
 
 # Path to dataset files (relative to project root)
 DATASET_DIR = os.path.join(os.path.dirname(__file__), "..", "dataset")
-JOBS_CSV = os.path.join(DATASET_DIR, "careerviet_all_jobs.csv")
+JOBS_CSV = os.path.join(DATASET_DIR, "careerviet_all_jobs_renamed.csv")
 INDUSTRIES_CSV = os.path.join(DATASET_DIR, "careerviet_industries.csv")
+EXPLODED_DIA_DIEM_CSV = os.path.join(DATASET_DIR, "exploded_địa điểm.csv")
+EXPLODED_NGANH_CSV = os.path.join(DATASET_DIR, "exploded_ngành.csv")
+EXPLODED_PHUC_LOI_CSV = os.path.join(DATASET_DIR, "exploded_phúc lợi.csv")
 
 # Execution timeout in seconds
 EXEC_TIMEOUT = 30
 
 
 def _load_datasets():
-    """Load the CareerViet datasets into DataFrames."""
+    """Load all CareerViet datasets into DataFrames."""
     df = pd.read_csv(JOBS_CSV, low_memory=False, encoding="utf-8-sig")
     df_industries = pd.read_csv(INDUSTRIES_CSV, encoding="utf-8-sig")
-    return df, df_industries
+    df_dia_diem = pd.read_csv(EXPLODED_DIA_DIEM_CSV, low_memory=False, encoding="utf-8-sig")
+    df_nganh = pd.read_csv(EXPLODED_NGANH_CSV, low_memory=False, encoding="utf-8-sig")
+    df_phuc_loi = pd.read_csv(EXPLODED_PHUC_LOI_CSV, low_memory=False, encoding="utf-8-sig")
+    return df, df_industries, df_dia_diem, df_nganh, df_phuc_loi
 
 
 def _capture_matplotlib_figures():
@@ -62,8 +68,11 @@ def execute_code(code: str) -> dict:
     Execute Python code in a controlled local environment.
     
     The code has access to:
-    - df: Main jobs DataFrame
-    - df_industries: Industries DataFrame
+    - df: Main jobs DataFrame (careerviet_all_jobs_renamed.csv)
+    - df_industries: Industries reference DataFrame
+    - df_dia_diem: Jobs exploded by location
+    - df_nganh: Jobs exploded by industry (Vietnamese names)
+    - df_phuc_loi: Jobs exploded by benefit
     - pandas (pd), numpy (np), matplotlib (plt), seaborn (sns)
     - plotly.express (px), plotly.graph_objects (go)
     - json module
@@ -80,7 +89,7 @@ def execute_code(code: str) -> dict:
     """
     # Load datasets fresh each time to avoid mutation across runs
     try:
-        df, df_industries = _load_datasets()
+        df, df_industries, df_dia_diem, df_nganh, df_phuc_loi = _load_datasets()
     except Exception as e:
         return {
             "success": False,
@@ -99,6 +108,9 @@ def execute_code(code: str) -> dict:
     exec_namespace = {
         "df": df,
         "df_industries": df_industries,
+        "df_dia_diem": df_dia_diem,
+        "df_nganh": df_nganh,
+        "df_phuc_loi": df_phuc_loi,
         "pd": pd,
         "np": np,
         "plt": plt,

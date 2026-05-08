@@ -122,6 +122,23 @@ def get_logs_by_thread(thread_id: str) -> list[dict]:
     conn.close()
     return [dict(row) for row in rows]
 
+def get_conversations() -> list[dict]:
+    """Retrieve all distinct conversations with summary info."""
+    conn = _get_connection()
+    rows = conn.execute("""
+        SELECT thread_id,
+               MIN(timestamp) as first_time,
+               MAX(timestamp) as last_time,
+               COUNT(*) as msg_count,
+               MIN(CASE WHEN user_request NOT LIKE '[Auto-fix]%' THEN user_request END) as first_request
+        FROM logs
+        WHERE thread_id IS NOT NULL AND thread_id != ''
+        GROUP BY thread_id
+        ORDER BY MAX(id) DESC
+    """).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
 
 # Initialize DB on import
 init_db()
