@@ -125,22 +125,37 @@ class AIAgent:
     @staticmethod
     def _parse_response(response_text: str) -> dict:
         """
-        Parse the AI response to extract code blocks and explanation.
+        Parse the AI response to extract thinking, code blocks, and explanation.
 
-        Looks for ```python ... ``` blocks. Everything outside code blocks
-        is treated as explanation.
+        Extracts:
+        - <Suy_nghĩ>...</Suy_nghĩ> blocks as chain-of-thought thinking
+        - ```python ... ``` blocks as executable code
+        - Everything else as the user-facing explanation
         """
+        # Extract thinking (Chain-of-Thought) from <Suy_nghĩ> tags
+        thinking_pattern = r"<Suy_nghĩ>(.*?)</Suy_nghĩ>"
+        thinking_matches = re.findall(thinking_pattern, response_text, re.DOTALL)
+        thinking = "\n\n".join(m.strip() for m in thinking_matches) if thinking_matches else None
+
+        # Split numbered steps (e.g. "1. … 2. … 3. …") onto separate lines
+        if thinking:
+            thinking = re.sub(r'(?<!\n)\s*(\d+\.\s)', r'\n\1', thinking).strip()
+
+        # Remove thinking tags from response before further parsing
+        text_without_thinking = re.sub(thinking_pattern, "", response_text, flags=re.DOTALL)
+
         # Find all Python code blocks
         code_pattern = r"```python\s*\n(.*?)```"
-        code_matches = re.findall(code_pattern, response_text, re.DOTALL)
+        code_matches = re.findall(code_pattern, text_without_thinking, re.DOTALL)
 
         # Join multiple code blocks if present
         code = "\n\n".join(code_matches).strip() if code_matches else None
 
-        # Explanation is everything outside code blocks
-        explanation = re.sub(code_pattern, "", response_text, flags=re.DOTALL).strip()
+        # Explanation is everything outside code blocks and thinking tags
+        explanation = re.sub(code_pattern, "", text_without_thinking, flags=re.DOTALL).strip()
 
         return {
+            "thinking": thinking,
             "explanation": explanation,
             "code": code,
             "raw_response": response_text,

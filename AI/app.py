@@ -107,6 +107,31 @@ st.markdown("""
     display: inline-block;
 }
 
+/* ---- Thinking / CoT display ---- */
+.thinking-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: #b8860b;
+    font-size: 0.88rem;
+    margin-bottom: 4px;
+}
+.thinking-content {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border-left: 4px solid #f59e0b;
+    border-radius: 0 8px 8px 0;
+    padding: 12px 16px;
+    margin: 6px 0 12px 0;
+    font-size: 0.88rem;
+    color: #78350f;
+    line-height: 1.6;
+    white-space: pre-line;
+}
+.thinking-content p {
+    margin: 4px 0;
+}
+
 /* ---- Code area ---- */
 .code-container {
     border: 2px solid #e0e0e0;
@@ -287,7 +312,19 @@ def render_message(msg: dict, msg_index: int):
         unsafe_allow_html=True,
     )
 
-    # Explanation
+    # Thinking / Chain-of-Thought (collapsible)
+    if msg.get("thinking"):
+        with st.expander(
+            "Quá trình suy nghĩ (Chain-of-Thought)",
+            expanded=False,
+            icon=":material/psychology:",
+        ):
+            st.markdown(
+                f'<div class="thinking-content">{msg["thinking"]}</div>',
+                unsafe_allow_html=True,
+            )
+
+    # Explanation (the actual user-facing answer)
     if msg.get("explanation"):
         st.markdown(msg["explanation"])
 
@@ -419,8 +456,7 @@ def _execute_approved_code(msg_index: int, code: str):
     msg["code"] = code  # Save potentially edited code
     msg["status"] = "approved"
 
-    with st.spinner("Đang thực thi code..."):
-        result = execute_code(code)
+    result = execute_code(code)
 
     msg["exec_result"] = result
 
@@ -474,8 +510,7 @@ def _request_ai_fix(msg_index: int):
     code = msg.get("code", "")
     error_tb = msg.get("exec_result", {}).get("error_traceback", "Unknown error")
 
-    with st.spinner("AI đang phân tích lỗi và sửa code..."):
-        response = agent.request_fix(conversation_id, code, error_tb)
+    response = agent.request_fix(conversation_id, code, error_tb)
 
     # Mark old message as failed
     msg["status"] = "failed"
@@ -484,6 +519,7 @@ def _request_ai_fix(msg_index: int):
     fix_msg = {
         "role": "assistant",
         "content": response["raw_response"],
+        "thinking": response.get("thinking"),
         "explanation": "**Sửa lỗi:**\n\n" + response["explanation"],
         "code": response["code"],
         "status": "pending" if response["code"] else "executed",
@@ -526,6 +562,7 @@ def handle_user_input(user_input: str):
     ai_msg = {
         "role": "assistant",
         "content": response["raw_response"],
+        "thinking": response.get("thinking"),
         "explanation": response["explanation"],
         "code": response["code"],
         "status": "pending" if response["code"] else "executed",
@@ -602,10 +639,43 @@ def render_history_tab():
                 ts = (log["timestamp"] or "")[:16]
                 req = log["user_request"] or ""
 
+                # ---- User request header ----
                 st.markdown(
                     f'{status_icon} `{ts}` — **{req}**',
                     unsafe_allow_html=True,
                 )
+
+                # ---- Full AI response ----
+                ai_explanation = log.get("ai_explanation") or ""
+                if ai_explanation:
+                    # Parse thinking (CoT) from stored explanation
+                    import re as _re
+                    thinking_pattern = r"<Suy_nghĩ>(.*?)</Suy_nghĩ>"
+                    thinking_matches = _re.findall(thinking_pattern, ai_explanation, _re.DOTALL)
+                    thinking_text = "\n\n".join(m.strip() for m in thinking_matches) if thinking_matches else None
+                    # Split numbered steps onto separate lines
+                    if thinking_text:
+                        thinking_text = _re.sub(r'(?<!\n)\s*(\d+\.\s)', r'\n\1', thinking_text).strip()
+                    # Clean explanation: remove thinking tags and code blocks
+                    clean_explanation = _re.sub(thinking_pattern, "", ai_explanation, flags=_re.DOTALL)
+                    code_pattern = r"```python\s*\n(.*?)```"
+                    clean_explanation = _re.sub(code_pattern, "", clean_explanation, flags=_re.DOTALL).strip()
+
+                    # Show thinking in collapsible expander
+                    if thinking_text:
+                        with st.expander(
+                            "Quá trình suy nghĩ (Chain-of-Thought)",
+                            expanded=False,
+                            icon=":material/psychology:",
+                        ):
+                            st.markdown(
+                                f'<div class="thinking-content">{thinking_text}</div>',
+                                unsafe_allow_html=True,
+                            )
+
+                    # Show explanation text
+                    if clean_explanation:
+                        st.markdown(clean_explanation)
 
                 # Show code if present
                 if log.get("generated_code"):
@@ -647,6 +717,8 @@ def render_history_tab():
                                         st.dataframe(table_info["data"], use_container_width=True)
                     except Exception as e:
                         st.error(f"Lỗi hiển thị kết quả: {e}")
+
+                st.markdown("---")
 
 
 # ---------------------------------------------------------------------------
