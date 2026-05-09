@@ -1,13 +1,13 @@
 # Schema dữ liệu
 
-Hệ thống có **5 DataFrame** được nạp sẵn vào môi trường thực thi. Tất cả đều lấy từ bộ dữ liệu tuyển dụng CareerViet (~23,500 tin tuyển dụng, 69 ngành nghề).
+Hệ thống có **6 DataFrame** được nạp sẵn vào môi trường thực thi. Tất cả đều lấy từ bộ dữ liệu tuyển dụng CareerViet (~23,500 tin tuyển dụng, 69 ngành nghề).
 
 ---
 
-## 1. `df` — Bảng chính (không explode)
+## 1. `df` - Bảng chính (không explode)
 
 **File gốc:** `careerviet_all_jobs_renamed.csv`  
-**Kích thước:** 23,536 dòng × 17 cột
+**Kích thước:** 23,536 dòng x 17 cột
 
 | Cột | Kiểu | Mô tả | Ghi chú |
 |-----|------|-------|---------|
@@ -25,7 +25,7 @@ Hệ thống có **5 DataFrame** được nạp sẵn vào môi trường thực
 | `kinh nghiệm từ (năm)` | float64 | Số năm kinh nghiệm tối thiểu | 4,482 giá trị null |
 | `kinh nghiệm đến (năm)` | float64 | Số năm kinh nghiệm tối đa | 7,964 giá trị null |
 | `phúc lợi` | object | Danh sách phúc lợi | **JSON string**, ví dụ: `'["Chế độ bảo hiểm", "Du Lịch"]'` |
-| `ngành` | object | Danh sách mã ngành nghề | **JSON string** chứa ID, ví dụ: `'["51", "9", "4"]'` — cần map với `df_industries` |
+| `ngành` | object | Danh sách mã ngành nghề | **JSON string** chứa ID, ví dụ: `'["51", "9", "4"]'` - cần map với `df_industries` |
 | `lương từ` | float64 | Mức lương tối thiểu (VNĐ) | 12,273 giá trị null (lương cạnh tranh) |
 | `lương đến` | float64 | Mức lương tối đa (VNĐ) | 12,273 giá trị null |
 
@@ -33,11 +33,11 @@ Hệ thống có **5 DataFrame** được nạp sẵn vào môi trường thực
 
 ---
 
-## 2. `df_dia_diem` — Exploded theo địa điểm
+## 2. `df_dia_diem` - Exploded theo địa điểm
 
 **File gốc:** `exploded_địa điểm.csv`  
-**Kích thước:** 27,449 dòng × 17 cột  
-**Mô tả:** Mỗi dòng = 1 công việc × 1 địa điểm. Cột `địa điểm` chứa **tên tỉnh/thành phố đơn lẻ** (không phải JSON).
+**Kích thước:** 27,449 dòng x 17 cột  
+**Mô tả:** Mỗi dòng = 1 công việc x 1 địa điểm. Cột `địa điểm` chứa **tên tỉnh/thành phố đơn lẻ** (không phải JSON).
 
 Ví dụ giá trị cột `địa điểm`: `Hồ Chí Minh`, `Hà Nội`, `Đà Nẵng`, `Bình Dương`...
 
@@ -45,11 +45,11 @@ Ví dụ giá trị cột `địa điểm`: `Hồ Chí Minh`, `Hà Nội`, `Đà
 
 ---
 
-## 3. `df_nganh` — Exploded theo ngành nghề
+## 3. `df_nganh` - Exploded theo ngành nghề
 
 **File gốc:** `exploded_ngành.csv`  
-**Kích thước:** 53,994 dòng × 17 cột  
-**Mô tả:** Mỗi dòng = 1 công việc × 1 ngành. Cột `ngành` chứa **tên ngành tiếng Việt** (đã map từ ID qua bảng `df_industries`).
+**Kích thước:** 53,994 dòng x 17 cột  
+**Mô tả:** Mỗi dòng = 1 công việc x 1 ngành. Cột `ngành` chứa **tên ngành tiếng Việt** (đã map từ ID qua bảng `df_industries`).
 
 Ví dụ giá trị cột `ngành`: `Bán hàng / Kinh doanh`, `Xây dựng`, `Kế toán / Kiểm toán`...
 
@@ -57,11 +57,11 @@ Ví dụ giá trị cột `ngành`: `Bán hàng / Kinh doanh`, `Xây dựng`, `K
 
 ---
 
-## 4. `df_phuc_loi` — Exploded theo phúc lợi
+## 4. `df_phuc_loi` - Exploded theo phúc lợi
 
 **File gốc:** `exploded_phúc lợi.csv`  
-**Kích thước:** 208,689 dòng × 17 cột  
-**Mô tả:** Mỗi dòng = 1 công việc × 1 phúc lợi. Cột `phúc lợi` chứa **tên phúc lợi đơn lẻ**.
+**Kích thước:** 208,689 dòng x 17 cột  
+**Mô tả:** Mỗi dòng = 1 công việc x 1 phúc lợi. Cột `phúc lợi` chứa **tên phúc lợi đơn lẻ**.
 
 Ví dụ giá trị cột `phúc lợi`: `Chế độ bảo hiểm`, `Đào tạo`, `Chế độ thưởng`, `Tăng lương`, `Du Lịch`...
 
@@ -69,10 +69,10 @@ Ví dụ giá trị cột `phúc lợi`: `Chế độ bảo hiểm`, `Đào tạ
 
 ---
 
-## 5. `df_industries` — Bảng tra cứu ngành nghề
+## 5. `df_industries` - Bảng tra cứu ngành nghề
 
 **File gốc:** `careerviet_industries.csv`  
-**Kích thước:** 69 dòng × 3 cột
+**Kích thước:** 69 dòng x 3 cột
 
 | Cột | Kiểu | Mô tả |
 |-----|------|-------|
@@ -80,10 +80,21 @@ Ví dụ giá trị cột `phúc lợi`: `Chế độ bảo hiểm`, `Đào tạ
 | `industry_name_en` | object | Tên ngành tiếng Anh |
 | `industry_name_vn` | object | Tên ngành tiếng Việt |
 
-**Dùng khi:** Cần map mã ngành từ bảng `df` sang tên ngành đầy đủ. Tuy nhiên, bảng `df_nganh` đã map sẵn — nên ưu tiên dùng `df_nganh` cho phân tích theo ngành.
+**Dùng khi:** Cần map mã ngành từ bảng `df` sang tên ngành đầy đủ. Tuy nhiên, bảng `df_nganh` đã map sẵn - nên ưu tiên dùng `df_nganh` cho phân tích theo ngành.
 
 ---
 
+## 6. `df_dia_diem_nganh` - Exploded theo địa điểm và ngành nghề
+
+**File gốc:** `exploded_all_combined.csv`  
+**Kích thước:** 62,048 dòng x 17 cột  
+**Mô tả:** Mỗi dòng = 1 công việc x 1 địa điểm x 1 ngành. Cột `địa điểm` chứa **tên tỉnh/thành phố đơn lẻ** (không phải JSON). Cột `ngành` chứa **tên ngành tiếng Việt** (đã map từ ID qua bảng `df_industries`).
+
+Ví dụ giá trị cột `địa điểm`: `Hồ Chí Minh`, `Hà Nội`, `Đà Nẵng`, `Bình Dương`...
+
+Ví dụ giá trị cột `ngành`: `Bán hàng / Kinh doanh`, `Xây dựng`, `Kế toán / Kiểm toán`...
+
+**Dùng khi:** phân tích những yêu cầu cần rõ ràng mỗi quan hệ giữa ngành và địa điểm riêng biệt.
 ## Chọn đúng bảng dữ liệu
 
 | Mục đích phân tích | Bảng nên dùng |
@@ -95,3 +106,6 @@ Ví dụ giá trị cột `phúc lợi`: `Chế độ bảo hiểm`, `Đào tạ
 | Map mã ngành sang tên | `df_industries` |
 | Phân tích lương | `df` (hoặc kết hợp với bảng exploded) |
 | Phân tích kinh nghiệm | `df` |
+| Phân tích theo địa điểm và ngành nghề |`df_dia_diem_nganh` |
+
+
