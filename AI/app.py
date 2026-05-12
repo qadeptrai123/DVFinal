@@ -513,7 +513,7 @@ def _execute_approved_code(msg_index: int, code: str):
                     "figures": result.get("figures", []),
                     "plotly_figures": plotly_json_list,
                     "tables": tables_json,
-                }, ensure_ascii=False),
+                }, ensure_ascii=False, default=str),
                 status="executed",
             )
     else:
@@ -678,34 +678,7 @@ def render_history_tab():
                 # ---- Full AI response ----
                 ai_explanation = log.get("ai_explanation") or ""
                 if ai_explanation:
-                    # Parse thinking (CoT) from stored explanation
-                    import re as _re
-                    thinking_pattern = r"<Suy_nghĩ>(.*?)</Suy_nghĩ>"
-                    thinking_matches = _re.findall(thinking_pattern, ai_explanation, _re.DOTALL)
-                    thinking_text = "\n\n".join(m.strip() for m in thinking_matches) if thinking_matches else None
-                    # Split numbered steps onto separate lines
-                    if thinking_text:
-                        thinking_text = _re.sub(r'(?<!\n)\s*(\d+\.\s)', r'\n\1', thinking_text).strip()
-                    # Clean explanation: remove thinking tags and code blocks
-                    clean_explanation = _re.sub(thinking_pattern, "", ai_explanation, flags=_re.DOTALL)
-                    code_pattern = r"```python\s*\n(.*?)```"
-                    clean_explanation = _re.sub(code_pattern, "", clean_explanation, flags=_re.DOTALL).strip()
-
-                    # Show thinking in collapsible expander
-                    if thinking_text:
-                        with st.expander(
-                            "Quá trình suy nghĩ (Chain-of-Thought)",
-                            expanded=False,
-                            icon=":material/psychology:",
-                        ):
-                            st.markdown(
-                                f'<div class="thinking-content">{thinking_text}</div>',
-                                unsafe_allow_html=True,
-                            )
-
-                    # Show explanation text
-                    if clean_explanation:
-                        st.markdown(clean_explanation)
+                    st.markdown(ai_explanation)
 
                 # Show code if present
                 if log.get("generated_code"):

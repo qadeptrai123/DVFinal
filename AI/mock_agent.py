@@ -49,6 +49,7 @@ class MockAIAgent:
         time.sleep(3) # Giả lập delay mạng (5 giây)
         
         return self.mock_data.get(key, {
+            "thinking": None,
             "explanation": f"Không tìm thấy mock key: {key}",
             "code": None,
             "raw_response": f"Không tìm thấy mock key: {key}"
@@ -60,7 +61,8 @@ class MockAIAgent:
         """
         time.sleep(3)
         return self.mock_data.get("fix", {
+            "thinking": "Mock fix: kiểm tra lại code.",
             "explanation": "Đây là mock fix.",
             "code": "print('Fixed!')",
-            "raw_response": "Đây là mock fix.\n```python\nprint('Fixed!')\n```"
+            "raw_response": "Đây là mock fix."
         })

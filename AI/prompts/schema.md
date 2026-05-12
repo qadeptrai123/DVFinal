@@ -108,4 +108,6 @@ Ví dụ giá trị cột `ngành`: `Bán hàng / Kinh doanh`, `Xây dựng`, `K
 | Phân tích kinh nghiệm | `df` |
 | Phân tích theo địa điểm và ngành nghề |`df_dia_diem_nganh` |
 
+## Lưu ý xử lý thời gian (Quan trọng)
 
+Các cột thời gian (`hạn nộp`, `ngày cập nhật`) trong dataset có **nhiều định dạng khác nhau** có thể bị lỗi, nên cẩn thận.
