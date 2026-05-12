@@ -69,6 +69,7 @@ st.markdown("""
     margin-left: auto;
     font-size: 0.95rem;
     box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    white-space: pre-wrap;
 }
 .ai-msg {
     background: #f0f2f6;
@@ -133,14 +134,32 @@ st.markdown("""
 }
 
 /* ---- Code area ---- */
-.code-container {
-    border: 2px solid #e0e0e0;
-    border-radius: 8px;
-    margin: 8px 0;
+[data-testid="stTextArea"] textarea {
+    background-color: #0e1117 !important;
+    color: #d4d4d4 !important;
+    font-family: 'Source Code Pro', 'Monaco', 'Consolas', monospace !important;
+    font-size: 0.92rem !important;
+    line-height: 1.5 !important;
+    border: 1px solid #31333f !important;
+    border-radius: 8px !important;
+    padding: 1rem !important;
 }
-.code-container.pending { border-color: #ffc107; }
-.code-container.executed { border-color: #28a745; }
-.code-container.failed { border-color: #dc3545; }
+
+[data-testid="stTextArea"] label {
+    color: #fafafa !important;
+    font-weight: 600 !important;
+    margin-bottom: 8px !important;
+}
+
+/* Style st.code to match */
+div[data-testid="stCodeBlock"] {
+    border: 1px solid #31333f !important;
+    border-radius: 8px !important;
+}
+
+div[data-testid="stCodeBlock"] > div {
+    background-color: #0e1117 !important;
+}
 
 /* ---- Sidebar ---- */
 .sidebar-section {
@@ -152,11 +171,11 @@ st.markdown("""
 
 /* ---- History cards ---- */
 .history-card {
-    border: 1px solid #e0e0e0;
+    border: 1px solid #31333f;
     border-radius: 8px;
     padding: 10px 14px;
     margin-bottom: 8px;
-    background: #fafbfc;
+    background: #1a1c23;
 }
 .conv-id {
     font-size: 0.72rem;
@@ -168,6 +187,7 @@ st.markdown("""
     color: #999;
 }
 </style>
+
 """, unsafe_allow_html=True)
 
 
@@ -300,8 +320,9 @@ def render_message(msg: dict, msg_index: int):
     role = msg["role"]
 
     if role == "user":
+        content_html = msg["content"].replace("\n", "<br>")
         st.markdown(
-            f'<div class="user-msg"><i class="fa-solid fa-user fa-icon"></i>{msg["content"]}</div>',
+            f'<div class="user-msg"><i class="fa-solid fa-user fa-icon"></i> {content_html}</div>',
             unsafe_allow_html=True,
         )
         return
@@ -320,7 +341,7 @@ def render_message(msg: dict, msg_index: int):
             icon=":material/psychology:",
         ):
             st.markdown(
-                f'<div class="thinking-content">{msg["thinking"]}</div>',
+                f'<div class="thinking-content">{msg["thinking"].replace("\n", "<br>")}</div>',
                 unsafe_allow_html=True,
             )
 
@@ -347,13 +368,22 @@ def render_message(msg: dict, msg_index: int):
 
         # Editable code area (only editable if pending)
         if status == "pending":
-            edited_code = st.text_area(
-                "Code (có thể chỉnh sửa trước khi duyệt):",
-                value=code,
-                height=300,
-                key=f"code_editor_{msg_index}",
-                label_visibility="visible",
-            )
+            # Header with edit toggle
+            col_t, col_e = st.columns([4, 1])
+            with col_t:
+                is_editing = st.toggle("Chỉnh sửa code (bật để sửa, tắt để xem highlight)", key=f"edit_mode_{msg_index}", value=False)
+            
+            if is_editing:
+                edited_code = st.text_area(
+                    "Code Editor",
+                    value=code,
+                    height=400,
+                    key=f"code_editor_{msg_index}",
+                    label_visibility="collapsed",
+                )
+            else:
+                st.code(code, language="python")
+                edited_code = code
 
             col1, col2 = st.columns(2)
             with col1:
@@ -857,6 +887,25 @@ def main():
 
     with tab_history:
         render_history_tab()
+
+    # ---- JS Injection to disable spellcheck ----
+    import streamlit.components.v1 as components
+    components.html("""
+        <script>
+            function disableSpellcheck() {
+                const textareas = window.parent.document.querySelectorAll('textarea');
+                textareas.forEach(t => {
+                    t.setAttribute('spellcheck', 'false');
+                    t.setAttribute('autocomplete', 'off');
+                    t.setAttribute('autocorrect', 'off');
+                    t.setAttribute('autocapitalize', 'off');
+                    // Force remove existing underlines if possible
+                    t.style.textDecoration = 'none';
+                });
+            }
+            setInterval(disableSpellcheck, 500);
+        </script>
+    """, height=0)
 
 
 if __name__ == "__main__":
