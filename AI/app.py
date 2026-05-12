@@ -18,6 +18,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from ai_agent import AIAgent
+from mock_agent import MockAIAgent
 from code_executor import execute_code, JOBS_CSV, INDUSTRIES_CSV
 from log_store import (
     save_log, update_log, get_logs, get_logs_by_thread,
@@ -106,6 +107,31 @@ st.markdown("""
     display: inline-block;
 }
 
+/* ---- Thinking / CoT display ---- */
+.thinking-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: #b8860b;
+    font-size: 0.88rem;
+    margin-bottom: 4px;
+}
+.thinking-content {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border-left: 4px solid #f59e0b;
+    border-radius: 0 8px 8px 0;
+    padding: 12px 16px;
+    margin: 6px 0 12px 0;
+    font-size: 0.88rem;
+    color: #78350f;
+    line-height: 1.6;
+    white-space: pre-line;
+}
+.thinking-content p {
+    margin: 4px 0;
+}
+
 /* ---- Code area ---- */
 .code-container {
     border: 2px solid #e0e0e0;
@@ -157,6 +183,10 @@ def init_session_state():
         "is_connected": False,
         "connection_error": None,
         "active_tab": "chat",     # "chat" or "history"
+        "is_generating": False,   # Lock input while generating
+        "current_user_input": None, # Store input across rerun
+        "pending_execution": None,  # Lock during code execution
+        "pending_ai_fix": None,     # Lock during AI auto-fix
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -168,9 +198,16 @@ def auto_connect():
     if st.session_state.is_connected:
         return  # Already connected
 
+    use_mock = os.getenv("USE_MOCK", "false").lower() == "true"
     api_key = os.getenv("OPENAI_API_KEY", "")
     model = os.getenv("OPENAI_MODEL", "gpt-4o")
     base_url = os.getenv("OPENAI_BASE_URL", None)
+
+    if use_mock:
+        st.session_state.agent = MockAIAgent(api_key="mock", model="mock-model")
+        st.session_state.is_connected = True
+        st.session_state.connection_error = None
+        return
 
     if not api_key:
         st.session_state.connection_error = (
@@ -275,7 +312,19 @@ def render_message(msg: dict, msg_index: int):
         unsafe_allow_html=True,
     )
 
-    # Explanation
+    # Thinking / Chain-of-Thought (collapsible)
+    if msg.get("thinking"):
+        with st.expander(
+            "Quá trình suy nghĩ (Chain-of-Thought)",
+            expanded=False,
+            icon=":material/psychology:",
+        ):
+            st.markdown(
+                f'<div class="thinking-content">{msg["thinking"]}</div>',
+                unsafe_allow_html=True,
+            )
+
+    # Explanation (the actual user-facing answer)
     if msg.get("explanation"):
         st.markdown(msg["explanation"])
 
@@ -314,8 +363,10 @@ def render_message(msg: dict, msg_index: int):
                     key=f"approve_{msg_index}",
                     type="primary",
                     use_container_width=True,
+                    disabled=st.session_state.get("is_generating") or st.session_state.get("pending_execution") is not None or st.session_state.get("pending_ai_fix") is not None
                 ):
-                    _execute_approved_code(msg_index, edited_code)
+                    st.session_state.pending_execution = (msg_index, edited_code)
+                    st.rerun()
 
             with col2:
                 if st.button(
@@ -323,6 +374,7 @@ def render_message(msg: dict, msg_index: int):
                     icon=":material/close:",
                     key=f"reject_{msg_index}",
                     use_container_width=True,
+                    disabled=st.session_state.get("is_generating") or st.session_state.get("pending_execution") is not None or st.session_state.get("pending_ai_fix") is not None
                 ):
                     st.session_state.messages[msg_index]["status"] = "rejected"
                     if msg.get("log_id"):
@@ -379,14 +431,17 @@ def render_message(msg: dict, msg_index: int):
                     key=f"fix_{msg_index}",
                     type="primary",
                     use_container_width=True,
+                    disabled=st.session_state.get("is_generating") or st.session_state.get("pending_execution") is not None or st.session_state.get("pending_ai_fix") is not None
                 ):
-                    _request_ai_fix(msg_index)
+                    st.session_state.pending_ai_fix = msg_index
+                    st.rerun()
             with col2:
                 if st.button(
                     "Sửa thủ công",
                     icon=":material/edit:",
                     key=f"manual_fix_{msg_index}",
                     use_container_width=True,
+                    disabled=st.session_state.get("is_generating") or st.session_state.get("pending_execution") is not None or st.session_state.get("pending_ai_fix") is not None
                 ):
                     # Reset to pending so user can edit
                     st.session_state.messages[msg_index]["status"] = "pending"
@@ -401,21 +456,33 @@ def _execute_approved_code(msg_index: int, code: str):
     msg["code"] = code  # Save potentially edited code
     msg["status"] = "approved"
 
-    with st.spinner("Đang thực thi code..."):
-        result = execute_code(code)
+    result = execute_code(code)
 
     msg["exec_result"] = result
 
     if result["success"]:
         msg["status"] = "executed"
+        
+        # Serialize plotly figures and tables to JSON format for DB
+        plotly_json_list = [fig.to_json() for fig in result.get("plotly_figures", [])]
+        tables_json = []
+        for table_info in result.get("tables", []):
+            tables_json.append({
+                "name": table_info["name"],
+                "data": table_info["data"].to_dict(orient="records"),
+                "total_rows": table_info["total_rows"],
+                "truncated": table_info["truncated"],
+            })
+
         if msg.get("log_id"):
             update_log(
                 msg["log_id"],
                 edited_code=code,
                 execution_result=json.dumps({
                     "stdout": result["stdout"],
-                    "figures_count": len(result.get("figures", [])),
-                    "tables_count": len(result.get("tables", [])),
+                    "figures": result.get("figures", []),
+                    "plotly_figures": plotly_json_list,
+                    "tables": tables_json,
                 }, ensure_ascii=False),
                 status="executed",
             )
@@ -428,8 +495,6 @@ def _execute_approved_code(msg_index: int, code: str):
                 error_traceback=result.get("error_traceback", ""),
                 status="failed",
             )
-
-    st.rerun()
 
 
 def _request_ai_fix(msg_index: int):
@@ -445,8 +510,7 @@ def _request_ai_fix(msg_index: int):
     code = msg.get("code", "")
     error_tb = msg.get("exec_result", {}).get("error_traceback", "Unknown error")
 
-    with st.spinner("AI đang phân tích lỗi và sửa code..."):
-        response = agent.request_fix(conversation_id, code, error_tb)
+    response = agent.request_fix(conversation_id, code, error_tb)
 
     # Mark old message as failed
     msg["status"] = "failed"
@@ -455,6 +519,7 @@ def _request_ai_fix(msg_index: int):
     fix_msg = {
         "role": "assistant",
         "content": response["raw_response"],
+        "thinking": response.get("thinking"),
         "explanation": "**Sửa lỗi:**\n\n" + response["explanation"],
         "code": response["code"],
         "status": "pending" if response["code"] else "executed",
@@ -472,14 +537,13 @@ def _request_ai_fix(msg_index: int):
     fix_msg["log_id"] = log_id
 
     st.session_state.messages.append(fix_msg)
-    st.rerun()
 
 
 # ---------------------------------------------------------------------------
 # Main chat input handler
 # ---------------------------------------------------------------------------
 def handle_user_input(user_input: str):
-    """Process a new user message."""
+    """Process a new user message. (Assumes user message is already appended to state)"""
     agent = st.session_state.agent
     if not agent:
         st.error("Vui lòng kết nối với OpenAI trước!")
@@ -491,20 +555,14 @@ def handle_user_input(user_input: str):
 
     conversation_id = st.session_state.conversation_id
 
-    # Add user message to chat
-    st.session_state.messages.append({
-        "role": "user",
-        "content": user_input,
-    })
-
     # Get AI response
-    with st.spinner("AI đang suy nghĩ..."):
-        response = agent.send_message(conversation_id, user_input)
+    response = agent.send_message(conversation_id, user_input)
 
     # Add AI message to chat
     ai_msg = {
         "role": "assistant",
         "content": response["raw_response"],
+        "thinking": response.get("thinking"),
         "explanation": response["explanation"],
         "code": response["code"],
         "status": "pending" if response["code"] else "executed",
@@ -581,10 +639,43 @@ def render_history_tab():
                 ts = (log["timestamp"] or "")[:16]
                 req = log["user_request"] or ""
 
+                # ---- User request header ----
                 st.markdown(
                     f'{status_icon} `{ts}` — **{req}**',
                     unsafe_allow_html=True,
                 )
+
+                # ---- Full AI response ----
+                ai_explanation = log.get("ai_explanation") or ""
+                if ai_explanation:
+                    # Parse thinking (CoT) from stored explanation
+                    import re as _re
+                    thinking_pattern = r"<Suy_nghĩ>(.*?)</Suy_nghĩ>"
+                    thinking_matches = _re.findall(thinking_pattern, ai_explanation, _re.DOTALL)
+                    thinking_text = "\n\n".join(m.strip() for m in thinking_matches) if thinking_matches else None
+                    # Split numbered steps onto separate lines
+                    if thinking_text:
+                        thinking_text = _re.sub(r'(?<!\n)\s*(\d+\.\s)', r'\n\1', thinking_text).strip()
+                    # Clean explanation: remove thinking tags and code blocks
+                    clean_explanation = _re.sub(thinking_pattern, "", ai_explanation, flags=_re.DOTALL)
+                    code_pattern = r"```python\s*\n(.*?)```"
+                    clean_explanation = _re.sub(code_pattern, "", clean_explanation, flags=_re.DOTALL).strip()
+
+                    # Show thinking in collapsible expander
+                    if thinking_text:
+                        with st.expander(
+                            "Quá trình suy nghĩ (Chain-of-Thought)",
+                            expanded=False,
+                            icon=":material/psychology:",
+                        ):
+                            st.markdown(
+                                f'<div class="thinking-content">{thinking_text}</div>',
+                                unsafe_allow_html=True,
+                            )
+
+                    # Show explanation text
+                    if clean_explanation:
+                        st.markdown(clean_explanation)
 
                 # Show code if present
                 if log.get("generated_code"):
@@ -595,6 +686,39 @@ def render_history_tab():
                 if log.get("error_traceback"):
                     with st.expander("Xem lỗi", icon=":material/bug_report:"):
                         st.code(log["error_traceback"], language=None)
+
+                # Show execution results if present
+                if log.get("execution_result"):
+                    try:
+                        exec_res = json.loads(log["execution_result"])
+                        has_results = any([
+                            exec_res.get("stdout"), 
+                            exec_res.get("figures"), 
+                            exec_res.get("plotly_figures"), 
+                            exec_res.get("tables")
+                        ])
+                        if has_results:
+                            with st.expander("Xem kết quả thực thi", icon=":material/bar_chart:"):
+                                if exec_res.get("stdout"):
+                                    st.code(exec_res["stdout"], language=None)
+                                
+                                for i, fig_b64 in enumerate(exec_res.get("figures", [])):
+                                    st.image(base64.b64decode(fig_b64), caption=f"Biểu đồ {i+1}", use_container_width=True)
+                                
+                                if exec_res.get("plotly_figures"):
+                                    import plotly.io as pio
+                                    for p_json in exec_res["plotly_figures"]:
+                                        fig = pio.from_json(p_json)
+                                        st.plotly_chart(fig, use_container_width=True)
+                                
+                                if exec_res.get("tables"):
+                                    for table_info in exec_res["tables"]:
+                                        st.markdown(f"**{table_info['name']}**")
+                                        st.dataframe(table_info["data"], use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Lỗi hiển thị kết quả: {e}")
+
+                st.markdown("---")
 
 
 # ---------------------------------------------------------------------------
@@ -631,48 +755,105 @@ def main():
 
         st.markdown("---")
 
-        # ---- Chat history ----
+        # ---- Layout: create containers in visual order ----
+        # chat_container appears above input_container on screen,
+        # but we WRITE to input_container first so `is_busy` is
+        # evaluated (and the disabled state is flushed to the browser)
+        # BEFORE any blocking call in chat_container.
         chat_container = st.container()
-        with chat_container:
-            if not st.session_state.messages:
-                # Welcome + suggestions
+        st.markdown("---")
+        input_container = st.container()
+
+        # ====== 1. RENDER INPUT AREA FIRST (code order) ======
+        with input_container:
+            has_pending_review = any(
+                m.get("status") == "pending"
+                for m in st.session_state.messages
+                if m.get("role") == "assistant"
+            )
+            is_busy = (
+                st.session_state.get("is_generating", False)
+                or st.session_state.get("pending_execution") is not None
+                or st.session_state.get("pending_ai_fix") is not None
+                or has_pending_review
+            )
+
+            if is_busy:
+                # No st.chat_input at all → physically impossible to type
+                if has_pending_review and not (
+                    st.session_state.get("is_generating", False)
+                    or st.session_state.get("pending_execution") is not None
+                    or st.session_state.get("pending_ai_fix") is not None
+                ):
+                    blocked_msg = (
+                        '<i class="fa-solid fa-code fa-icon"></i>'
+                        'Vui lòng duyệt hoặc từ chối code trước khi tiếp tục...'
+                    )
+                else:
+                    blocked_msg = (
+                        '<i class="fa-solid fa-spinner fa-spin fa-icon"></i>'
+                        'Đang xử lý, vui lòng chờ...'
+                    )
                 st.markdown(
-                    '### <i class="fa-solid fa-lightbulb fa-icon"></i>Gợi ý phân tích',
+                    '<div style="padding:12px 16px; background:#262730;'
+                    ' border:1px solid #3b3b4f; border-radius:24px;'
+                    ' color:#6b6b80; font-size:0.9rem; text-align:center;'
+                    ' cursor:not-allowed; user-select:none;">'
+                    f'{blocked_msg}'
+                    '</div>',
                     unsafe_allow_html=True,
                 )
-                suggestions = [
-                    "Phân tích mức lương trung bình theo ngành nghề",
-                    "Top 10 công ty tuyển dụng nhiều nhất",
-                    "Phân bố địa điểm làm việc trên cả nước",
-                    "Xu hướng tuyển dụng theo thời gian",
-                    "Phân tích yêu cầu kinh nghiệm theo ngành",
-                    "So sánh lương giữa các thành phố lớn",
-                ]
-                cols = st.columns(3)
-                for i, suggestion in enumerate(suggestions):
-                    with cols[i % 3]:
-                        if st.button(
-                            suggestion,
-                            icon=":material/lightbulb:",
-                            key=f"suggest_{i}",
-                            use_container_width=True,
-                        ):
-                            handle_user_input(suggestion)
-                            st.rerun()
+            else:
+                user_input = st.chat_input(
+                    "Nhập câu hỏi phân tích...",
+                    key="chat_input",
+                )
+                if user_input:
+                    st.session_state.messages.append(
+                        {"role": "user", "content": user_input}
+                    )
+                    st.session_state.current_user_input = user_input
+                    st.session_state.is_generating = True
+                    st.rerun()
+
+        # ====== 2. RENDER CHAT AREA (may include blocking calls) ======
+        with chat_container:
+            if not st.session_state.messages:
+                st.info(
+                    "Chưa có tin nhắn nào. "
+                    "Vui lòng nhập yêu cầu phân tích dữ liệu ở khung bên dưới."
+                )
             else:
                 # Render all messages
                 for i, msg in enumerate(st.session_state.messages):
                     render_message(msg, i)
 
-        # ---- Input area ----
-        st.markdown("---")
-        user_input = st.chat_input(
-            "Nhập câu hỏi phân tích...",
-            key="chat_input",
-        )
-        if user_input:
-            handle_user_input(user_input)
-            st.rerun()
+                # Handle pending code execution (blocking)
+                if st.session_state.get("pending_execution") is not None:
+                    msg_index, code = st.session_state.pending_execution
+                    with st.spinner("Đang thực thi code..."):
+                        _execute_approved_code(msg_index, code)
+                    st.session_state.pending_execution = None
+                    st.rerun()
+
+                # Handle pending AI fix (blocking)
+                if st.session_state.get("pending_ai_fix") is not None:
+                    msg_idx = st.session_state.pending_ai_fix
+                    with st.spinner("AI đang phân tích lỗi và sửa code..."):
+                        _request_ai_fix(msg_idx)
+                    st.session_state.pending_ai_fix = None
+                    st.rerun()
+
+                # Handle pending AI generation (blocking)
+                if (
+                    st.session_state.get("is_generating")
+                    and st.session_state.get("current_user_input")
+                ):
+                    with st.spinner("AI đang suy nghĩ..."):
+                        handle_user_input(st.session_state.current_user_input)
+                    st.session_state.is_generating = False
+                    st.session_state.current_user_input = None
+                    st.rerun()
 
     with tab_history:
         render_history_tab()

@@ -33,6 +33,7 @@ INDUSTRIES_CSV = os.path.join(DATASET_DIR, "careerviet_industries.csv")
 EXPLODED_DIA_DIEM_CSV = os.path.join(DATASET_DIR, "exploded_địa điểm.csv")
 EXPLODED_NGANH_CSV = os.path.join(DATASET_DIR, "exploded_ngành.csv")
 EXPLODED_PHUC_LOI_CSV = os.path.join(DATASET_DIR, "exploded_phúc lợi.csv")
+EXPLODED_ALL_COMBINED_CSV = os.path.join(DATASET_DIR, "exploded_all_combined.csv")
 
 # Execution timeout in seconds
 EXEC_TIMEOUT = 30
@@ -45,7 +46,8 @@ def _load_datasets():
     df_dia_diem = pd.read_csv(EXPLODED_DIA_DIEM_CSV, low_memory=False, encoding="utf-8-sig")
     df_nganh = pd.read_csv(EXPLODED_NGANH_CSV, low_memory=False, encoding="utf-8-sig")
     df_phuc_loi = pd.read_csv(EXPLODED_PHUC_LOI_CSV, low_memory=False, encoding="utf-8-sig")
-    return df, df_industries, df_dia_diem, df_nganh, df_phuc_loi
+    df_dia_diem_nganh = pd.read_csv(EXPLODED_ALL_COMBINED_CSV, low_memory=False, encoding="utf-8-sig")
+    return df, df_industries, df_dia_diem, df_nganh, df_phuc_loi, df_dia_diem_nganh
 
 
 def _capture_matplotlib_figures():
@@ -74,6 +76,7 @@ def execute_code(code: str) -> dict:
     - df_nganh: Jobs exploded by industry (Vietnamese names)
     - df_phuc_loi: Jobs exploded by benefit
     - pandas (pd), numpy (np), matplotlib (plt), seaborn (sns)
+    - df_dia_diem_nganh: Jobs exploded by both location and industry
     - plotly.express (px), plotly.graph_objects (go)
     - json module
     
@@ -89,7 +92,7 @@ def execute_code(code: str) -> dict:
     """
     # Load datasets fresh each time to avoid mutation across runs
     try:
-        df, df_industries, df_dia_diem, df_nganh, df_phuc_loi = _load_datasets()
+        df, df_industries, df_dia_diem, df_nganh, df_phuc_loi, df_dia_diem_nganh = _load_datasets()
     except Exception as e:
         return {
             "success": False,
@@ -111,6 +114,7 @@ def execute_code(code: str) -> dict:
         "df_dia_diem": df_dia_diem,
         "df_nganh": df_nganh,
         "df_phuc_loi": df_phuc_loi,
+        "df_dia_diem_nganh": df_dia_diem_nganh,
         "pd": pd,
         "np": np,
         "plt": plt,
@@ -152,7 +156,7 @@ def execute_code(code: str) -> dict:
 
     if thread.is_alive():
         result["error_traceback"] = (
-            f"⏰ Code đã chạy quá {EXEC_TIMEOUT} giây và bị dừng lại. "
+            f"Code đã chạy quá {EXEC_TIMEOUT} giây và bị dừng lại. "
             f"Hãy tối ưu code hoặc giảm lượng dữ liệu xử lý."
         )
         return result
